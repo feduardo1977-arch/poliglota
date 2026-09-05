@@ -259,9 +259,10 @@
       <div style="flex:2;">
         <label for="phrase">Palabra o frase</label>
         <div style="display:flex;gap:8px;align-items:flex-start;">
-          <textarea id="phrase" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
+          <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
           <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--gold);color:#fff;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
         </div>
+        <div id="charCount" style="font-size:0.72rem;color:#9a927a;margin-top:2px;text-align:right;">0 / 500</div>
         <div id="micStatus" style="font-size:0.78rem;color:#8C3B2E;margin-top:4px;min-height:1.1em;"></div>
       </div>
     </div>
@@ -383,7 +384,11 @@ async function translateOne(text, source, target){
     if(!res.ok) throw new Error('fallo de red');
     const data = await res.json();
     if(!data || !data.responseData) throw new Error('sin respuesta');
-    return data.responseData.translatedText;
+    const translated = data.responseData.translatedText || '';
+    if(translated.toUpperCase().includes('QUERY LENGTH LIMIT')){
+      throw new Error('LIMITE_CARACTERES');
+    }
+    return translated;
   }catch(networkErr){
     // Vista previa en sandbox: probamos el diccionario local de respaldo.
     const key = text.trim().toLowerCase();
@@ -471,7 +476,9 @@ async function doTranslate(){
       if(runId !== lastRunId) return;
       results[i] = null;
       const stampEl = stampsDiv.children[i].querySelector('.txt');
-      stampEl.textContent = 'no se pudo traducir';
+      stampEl.textContent = e.message === 'LIMITE_CARACTERES'
+        ? 'texto muy largo, acorta la frase'
+        : 'no se pudo traducir';
       stampEl.classList.remove('loading');
     }
   }
@@ -498,6 +505,10 @@ document.getElementById('translateBtn').addEventListener('click', doTranslate);
 // después de dejar de escribir, sin necesidad de tocar el botón.
 let debounceTimer = null;
 document.getElementById('phrase').addEventListener('input', () => {
+  const len = document.getElementById('phrase').value.length;
+  const counter = document.getElementById('charCount');
+  counter.textContent = len + ' / 500';
+  counter.style.color = len > 450 ? '#8C3B2E' : '#9a927a';
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(doTranslate, 500);
 });
