@@ -408,27 +408,59 @@ if('speechSynthesis' in window){
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-function speak(text, langCode){
+let activeSpeechBtn = null;
+
+function togglePlayPause(text, langCode, btn){
   if(!('speechSynthesis' in window)){
     alert('Tu navegador no soporta audio de voz.');
     return;
   }
-  const targetLocale = SPEECH_LOCALE[langCode] || langCode;
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(text.replace(/\s\*$/, ''));
-  utter.lang = targetLocale;
+  const synth = window.speechSynthesis;
+  const cleanText = text.replace(/\s\*$/, '');
 
-  // En Android a veces la lista de voces tarda en cargar; si está vacía,
-  // la pedimos de nuevo justo antes de hablar.
+  // Si este mismo botón ya está sonando, lo pausamos (no lo reiniciamos).
+  if(activeSpeechBtn === btn && synth.speaking && !synth.paused){
+    synth.pause();
+    btn.textContent = '▶️';
+    return;
+  }
+  // Si este mismo botón está en pausa, lo reanudamos donde iba.
+  if(activeSpeechBtn === btn && synth.paused){
+    synth.resume();
+    btn.textContent = '⏸️';
+    return;
+  }
+  // Cualquier otro audio se detiene por completo antes de empezar uno nuevo.
+  synth.cancel();
+  if(activeSpeechBtn) activeSpeechBtn.textContent = '🔊';
+
+  const targetLocale = SPEECH_LOCALE[langCode] || langCode;
+  const utter = new SpeechSynthesisUtterance(cleanText);
+  utter.lang = targetLocale;
+  utter.rate = 0.8; // un poco más lento para que se entienda mejor
+
   if(!voicesReady.length) loadVoices();
   const match = voicesReady.find(v => v.lang === targetLocale) ||
                 voicesReady.find(v => v.lang.startsWith(targetLocale.split('-')[0]));
   if(match) utter.voice = match;
 
-  utter.onerror = () => {
-    console.warn('No se pudo reproducir audio para', targetLocale);
-  };
-  window.speechSynthesis.speak(utter);
+  utter.onend = () => { btn.textContent = '🔊'; if(activeSpeechBtn === btn) activeSpeechBtn = null; };
+  utter.onerror = () => { btn.textContent = '🔊'; };
+
+  activeSpeechBtn = btn;
+  btn.textContent = '⏸️';
+  synth.speak(utter);
+}
+
+function copyText(text, btn){
+  const cleanText = text.replace(/\s\*$/, '');
+  navigator.clipboard.writeText(cleanText).then(() => {
+    const original = btn.textContent;
+    btn.textContent = '✅';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  }).catch(() => {
+    btn.textContent = '⚠️';
+  });
 }
 
 let lastRunId = 0;
@@ -464,13 +496,22 @@ async function doTranslate(){
       stampEl.innerHTML = '';
       const span = document.createElement('span');
       span.textContent = translated;
-      const speakBtn = document.createElement('button');
-      speakBtn.textContent = '🔊';
-      speakBtn.title = 'Escuchar pronunciación';
-      speakBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:1rem;padding:0 0 0 8px;vertical-align:middle;';
-      speakBtn.addEventListener('click', () => speak(translated, targets[i]));
+
+      const playBtn = document.createElement('button');
+      playBtn.textContent = '🔊';
+      playBtn.title = 'Escuchar / pausar pronunciación';
+      playBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:1rem;padding:0 4px;vertical-align:middle;';
+      playBtn.addEventListener('click', () => togglePlayPause(translated, targets[i], playBtn));
+
+      const copyBtn = document.createElement('button');
+      copyBtn.textContent = '📋';
+      copyBtn.title = 'Copiar traducción';
+      copyBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:1rem;padding:0 0 0 4px;vertical-align:middle;';
+      copyBtn.addEventListener('click', () => copyText(translated, copyBtn));
+
       stampEl.appendChild(span);
-      stampEl.appendChild(speakBtn);
+      stampEl.appendChild(playBtn);
+      stampEl.appendChild(copyBtn);
       stampEl.classList.remove('loading');
     }catch(e){
       if(runId !== lastRunId) return;
@@ -497,6 +538,19 @@ async function doTranslate(){
   saveBtn.style.marginTop = '4px';
   saveBtn.addEventListener('click', () => saveEntry(text, source, targets, results, saveBtn));
   statusDiv.appendChild(saveBtn);
+
+  const copyAllBtn = document.createElement('button');
+  copyAllBtn.className = 'btn-ghost';
+  copyAllBtn.textContent = 'Copiar todo';
+  copyAllBtn.style.cssText = 'margin-top:4px;margin-left:8px;';
+  copyAllBtn.addEventListener('click', () => {
+    const allText = targets.map((t,i) => results[i] ? `${langName(t)}: ${results[i].replace(/\s\*$/,'')}` : '').filter(Boolean).join('\n');
+    navigator.clipboard.writeText(allText).then(() => {
+      copyAllBtn.textContent = 'Copiado ✅';
+      setTimeout(() => { copyAllBtn.textContent = 'Copiar todo'; }, 1200);
+    });
+  });
+  statusDiv.appendChild(copyAllBtn);
 }
 
 document.getElementById('translateBtn').addEventListener('click', doTranslate);
