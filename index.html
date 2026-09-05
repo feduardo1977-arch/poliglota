@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Políglota — traduce y aprende</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
@@ -107,6 +108,36 @@
     margin-bottom:20px;
   }
   .target-slot select{background:#fbfaf6;}
+  .lang-preview{
+    font-size:1.8rem;
+    text-align:center;
+    margin-bottom:4px;
+    line-height:1;
+  }
+  .target-slot{
+    border:1.5px solid var(--line);
+    border-radius:6px;
+    padding:10px 8px 8px;
+    background:#fbfaf6;
+  }
+  .target-slot select{border:none;background:transparent;padding:4px;font-size:0.85rem;}
+
+  /* Ajustes específicos para pantalla de celular */
+  @media (max-width: 520px){
+    body{padding:20px 14px 50px;}
+    header h1{font-size:2rem;}
+    header p{max-width:none;font-size:0.9rem;}
+    .panel{padding:16px;}
+    select, textarea{font-size:1.05rem;padding:13px 12px;}
+    .targets{grid-template-columns:repeat(2, 1fr);}
+    .lang-preview{font-size:2.1rem;}
+    button{padding:14px 20px;font-size:1rem;width:100%;}
+    #micBtn{width:auto;padding:12px 16px;}
+    .row{flex-direction:column;}
+    .row > div{min-width:100%;}
+    .stamps{grid-template-columns:1fr;}
+    .postcards{grid-template-columns:1fr;}
+  }
 
   button{
     font-family:'IBM Plex Sans', sans-serif;
@@ -222,6 +253,7 @@
     <div class="row">
       <div>
         <label for="source">Idioma de origen</label>
+        <div class="lang-preview" id="sourcePreview">🇪🇸</div>
         <select id="source"></select>
       </div>
       <div style="flex:2;">
@@ -282,23 +314,42 @@ const statusDiv = document.getElementById('status');
 const vocabListDiv = document.getElementById('vocabList');
 const vocabEmptyDiv = document.getElementById('vocabEmpty');
 
+const FLAG = {
+  es:"🇪🇸", en:"🇬🇧", fr:"🇫🇷", pt:"🇵🇹", it:"🇮🇹", de:"🇩🇪",
+  nl:"🇳🇱", ja:"🇯🇵", ko:"🇰🇷", zh:"🇨🇳", ru:"🇷🇺", ar:"🇸🇦",
+  tr:"🇹🇷", sv:"🇸🇪", pl:"🇵🇱", hi:"🇮🇳", da:"🇩🇰", no:"🇳🇴",
+  fi:"🇫🇮", cs:"🇨🇿", el:"🇬🇷", he:"🇮🇱", th:"🇹🇭", vi:"🇻🇳",
+  id:"🇮🇩", ro:"🇷🇴", hu:"🇭🇺", uk:"🇺🇦", bg:"🇧🇬", sk:"🇸🇰",
+  fa:"🇮🇷", bn:"🇧🇩", ta:"🇱🇰", sw:"🇰🇪", ca:"🏴", gl:"🏴"
+};
 function langName(code){ const f = LANGS.find(l=>l[0]===code); return f ? f[1] : code; }
 
 function fillSelect(sel, selected){
   sel.innerHTML = LANGS.map(([code,name]) =>
-    `<option value="${code}" ${code===selected?'selected':''}>${name}</option>`
+    `<option value="${code}" ${code===selected?'selected':''}>${FLAG[code]||''} ${name}</option>`
   ).join('');
 }
 
 fillSelect(sourceSel, 'es');
+sourceSel.addEventListener('change', () => {
+  document.getElementById('sourcePreview').textContent = FLAG[sourceSel.value] || '🌐';
+});
 for(let i=0;i<4;i++){
   const wrap = document.createElement('div');
   wrap.className = 'target-slot';
+  const preview = document.createElement('div');
+  preview.className = 'lang-preview';
+  preview.id = 'preview'+i;
   const sel = document.createElement('select');
   sel.id = 'target'+i;
-  targetsDiv.appendChild(wrap);
+  wrap.appendChild(preview);
   wrap.appendChild(sel);
+  targetsDiv.appendChild(wrap);
   fillSelect(sel, DEFAULT_TARGETS[i]);
+  preview.textContent = FLAG[DEFAULT_TARGETS[i]] || '🌐';
+  sel.addEventListener('change', () => {
+    preview.textContent = FLAG[sel.value] || '🌐';
+  });
 }
 
 // Mini diccionario de respaldo: se usa SOLO si la llamada a la API externa
@@ -345,11 +396,33 @@ async function translateOne(text, source, target){
   }
 }
 
+let voicesReady = [];
+function loadVoices(){ voicesReady = window.speechSynthesis ? window.speechSynthesis.getVoices() : []; }
+if('speechSynthesis' in window){
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
 function speak(text, langCode){
-  if(!('speechSynthesis' in window)) return;
+  if(!('speechSynthesis' in window)){
+    alert('Tu navegador no soporta audio de voz.');
+    return;
+  }
+  const targetLocale = SPEECH_LOCALE[langCode] || langCode;
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text.replace(/\s\*$/, ''));
-  utter.lang = SPEECH_LOCALE[langCode] || langCode;
+  utter.lang = targetLocale;
+
+  // En Android a veces la lista de voces tarda en cargar; si está vacía,
+  // la pedimos de nuevo justo antes de hablar.
+  if(!voicesReady.length) loadVoices();
+  const match = voicesReady.find(v => v.lang === targetLocale) ||
+                voicesReady.find(v => v.lang.startsWith(targetLocale.split('-')[0]));
+  if(match) utter.voice = match;
+
+  utter.onerror = () => {
+    console.warn('No se pudo reproducir audio para', targetLocale);
+  };
   window.speechSynthesis.speak(utter);
 }
 
