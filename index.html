@@ -790,8 +790,7 @@ async function doTranslate(){
 
       const signLink = document.createElement('a');
       signLink.className = 'sign-link';
-      signLink.href = signLanguageUrl(translated.replace(/\s\*$/, ''));
-      signLink.target = '_blank';
+      signLink.href = signLanguageUrl(translated.replace(/\s\*$/, ''), targets[i]);
       signLink.rel = 'noopener';
       signLink.textContent = '🤟 Ver en lengua de señas';
       stampsDiv.children[i].appendChild(signLink);
@@ -1077,8 +1076,10 @@ signBoardDiv.querySelectorAll('.sign-tile').forEach((tile, i) => {
   });
 });
 
-function signLanguageUrl(word){
-  return `https://www.spreadthesign.com/en.us/search/?q=${encodeURIComponent(word)}`;
+function signLanguageUrl(word, langCode){
+  const bcp = SPEECH_LOCALE[langCode] || 'en-US';
+  const locale = bcp.toLowerCase().replace('-', '.');
+  return `https://www.spreadthesign.com/${locale}/search/?q=${encodeURIComponent(word)}`;
 }
 
 loadVocab();
