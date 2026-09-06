@@ -325,6 +325,51 @@
 
   .status{font-size:0.85rem;color:var(--text-dim);margin-top:10px;min-height:1.1em;}
 
+  .phrase-categories{
+    display:flex;
+    gap:8px;
+    overflow-x:auto;
+    padding-bottom:6px;
+    margin-bottom:14px;
+    scrollbar-width:none;
+  }
+  .phrase-categories::-webkit-scrollbar{display:none;}
+  .cat-chip{
+    flex:0 0 auto;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    border-radius:20px;
+    padding:8px 16px;
+    font-size:0.85rem;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .cat-chip.active{
+    background:linear-gradient(90deg, var(--accent), var(--accent-2));
+    color:#0A0C0A;
+    border-color:transparent;
+  }
+  .phrase-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .phrase-item{
+    text-align:left;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:12px 14px;
+    color:var(--text);
+    font-size:0.95rem;
+    cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .phrase-item:hover{border-color:var(--accent);}
+  .phrase-item:active{transform:scale(0.98);}
+
   /* Ajustes específicos para pantalla de celular */
   @media (max-width: 520px){
     body{padding:18px 12px 50px;}
@@ -384,6 +429,13 @@
       <button type="button" class="carousel-arrow right" id="nextStamp" aria-label="Siguiente">›</button>
       <div class="dots" id="stampDots"></div>
     </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">✈️ Frases para viajar</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin:-8px 0 14px;">Toca una categoría y luego una frase para autocompletarla y traducirla al instante.</p>
+    <div class="phrase-categories" id="phraseCategories"></div>
+    <div class="phrase-list" id="phraseList"></div>
   </div>
 
   <div class="panel">
@@ -821,6 +873,92 @@ async function loadVocab(){
     });
   });
 }
+
+const PHRASE_CATEGORIES = {
+  "✈️ Aeropuerto": [
+    "¿Dónde está la puerta de embarque?",
+    "Perdí mi vuelo de conexión",
+    "¿Dónde recojo mi equipaje?",
+    "Mi maleta no llegó",
+    "¿Dónde está el control de pasaportes?",
+    "¿A qué hora sale mi vuelo?"
+  ],
+  "🏨 Hotel": [
+    "Tengo una reservación a mi nombre",
+    "¿A qué hora es el check-out?",
+    "¿El desayuno está incluido?",
+    "No funciona el aire acondicionado",
+    "¿Tienen wifi gratis?",
+    "Necesito una toalla más, por favor"
+  ],
+  "🍽️ Restaurante": [
+    "La cuenta, por favor",
+    "¿Qué me recomienda?",
+    "Soy alérgico a los mariscos",
+    "Una mesa para dos, por favor",
+    "¿Tienen menú vegetariano?",
+    "Está delicioso, gracias"
+  ],
+  "🧭 Direcciones": [
+    "¿Cómo llego a la estación de tren?",
+    "¿Está lejos de aquí?",
+    "¿Puede indicarme en el mapa?",
+    "¿Hay un baño cerca?",
+    "Estoy perdido, ¿me puede ayudar?",
+    "¿Cuál autobús va al centro?"
+  ],
+  "🚨 Emergencias": [
+    "Necesito ayuda, por favor",
+    "Llame a una ambulancia",
+    "Perdí mi pasaporte",
+    "Me robaron la cartera",
+    "¿Dónde está el hospital más cercano?",
+    "No me siento bien"
+  ],
+  "🛍️ Compras": [
+    "¿Cuánto cuesta esto?",
+    "¿Aceptan tarjeta de crédito?",
+    "¿Tiene una talla más grande?",
+    "Solo estoy mirando, gracias",
+    "¿Me puede hacer un descuento?",
+    "Quisiera un recibo, por favor"
+  ],
+  "👋 Cortesía": [
+    "Mucho gusto en conocerte",
+    "No hablo bien tu idioma, disculpa",
+    "¿Habla español o inglés?",
+    "Muchas gracias por tu ayuda",
+    "¿Puede hablar más despacio, por favor?",
+    "Que tenga un buen día"
+  ]
+};
+
+const catsDiv = document.getElementById('phraseCategories');
+const phraseListDiv = document.getElementById('phraseList');
+const categoryNames = Object.keys(PHRASE_CATEGORIES);
+
+function renderPhraseCategory(catName){
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c.dataset.cat === catName));
+  phraseListDiv.innerHTML = PHRASE_CATEGORIES[catName].map(p =>
+    `<button type="button" class="phrase-item">${p}</button>`
+  ).join('');
+  phraseListDiv.querySelectorAll('.phrase-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const phraseBox = document.getElementById('phrase');
+      phraseBox.value = btn.textContent;
+      phraseBox.dispatchEvent(new Event('input'));
+      phraseBox.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  });
+}
+
+catsDiv.innerHTML = categoryNames.map((c,i) =>
+  `<button type="button" class="cat-chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`
+).join('');
+catsDiv.querySelectorAll('.cat-chip').forEach(chip => {
+  chip.addEventListener('click', () => renderPhraseCategory(chip.dataset.cat));
+});
+renderPhraseCategory(categoryNames[0]);
 
 loadVocab();
 
