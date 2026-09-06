@@ -325,12 +325,12 @@
 
   .status{font-size:0.85rem;color:var(--text-dim);margin-top:10px;min-height:1.1em;}
 
+  .phrase-cats-wrap{position:relative;margin-bottom:14px;}
   .phrase-categories{
     display:flex;
     gap:8px;
     overflow-x:auto;
     padding-bottom:6px;
-    margin-bottom:14px;
     scrollbar-width:none;
   }
   .phrase-categories::-webkit-scrollbar{display:none;}
@@ -434,7 +434,11 @@
   <div class="panel">
     <h2 class="section-title">✈️ Frases para viajar</h2>
     <p style="font-size:0.82rem;color:var(--text-dim);margin:-8px 0 14px;">Toca una categoría y luego una frase para autocompletarla y traducirla al instante.</p>
-    <div class="phrase-categories" id="phraseCategories"></div>
+    <div class="phrase-cats-wrap">
+      <button type="button" class="carousel-arrow left" id="prevCat" aria-label="Categoría anterior">‹</button>
+      <div class="phrase-categories" id="phraseCategories"></div>
+      <button type="button" class="carousel-arrow right" id="nextCat" aria-label="Categoría siguiente">›</button>
+    </div>
     <div class="phrase-list" id="phraseList"></div>
   </div>
 
@@ -930,6 +934,34 @@ const PHRASE_CATEGORIES = {
     "Muchas gracias por tu ayuda",
     "¿Puede hablar más despacio, por favor?",
     "Que tenga un buen día"
+  ],
+  "🔢 Números": [
+    "Uno", "Dos", "Tres", "Cuatro", "Cinco",
+    "Seis", "Siete", "Ocho", "Nueve", "Diez"
+  ],
+  "🔤 Abecedario": [
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+    "N", "Ñ", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"
+  ],
+  "🐾 Animales": [
+    "El perro", "El gato", "El caballo", "El elefante", "El león",
+    "El pájaro", "El pez", "El conejo", "La vaca", "El cerdo", "El oso", "La tortuga"
+  ],
+  "🍳 Cocina": [
+    "La cuchara", "El tenedor", "El cuchillo", "El plato", "La olla",
+    "El horno", "La nevera", "La taza", "La sartén", "El microondas"
+  ],
+  "💻 Soporte técnico": [
+    "Mi computadora no enciende",
+    "La pantalla está congelada",
+    "No tengo conexión a internet",
+    "El programa se cerró solo",
+    "Necesito reiniciar el sistema",
+    "¿Puede revisar este error?",
+    "La impresora no funciona",
+    "Perdí mis archivos",
+    "El sistema está muy lento",
+    "Necesito actualizar el software"
   ]
 };
 
@@ -959,6 +991,20 @@ catsDiv.querySelectorAll('.cat-chip').forEach(chip => {
   chip.addEventListener('click', () => renderPhraseCategory(chip.dataset.cat));
 });
 renderPhraseCategory(categoryNames[0]);
+
+// Flechas y rueda del mouse para navegar categorías en PC
+document.getElementById('prevCat').addEventListener('click', () => {
+  catsDiv.scrollBy({left: -160, behavior: 'smooth'});
+});
+document.getElementById('nextCat').addEventListener('click', () => {
+  catsDiv.scrollBy({left: 160, behavior: 'smooth'});
+});
+catsDiv.addEventListener('wheel', (e) => {
+  if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
+    e.preventDefault();
+    catsDiv.scrollLeft += e.deltaY;
+  }
+}, {passive:false});
 
 loadVocab();
 
