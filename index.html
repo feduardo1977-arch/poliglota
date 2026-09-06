@@ -159,6 +159,16 @@
     background:var(--surface-2);
     color:var(--text);
   }
+  #phrase{
+    border:2px solid var(--accent);
+    box-shadow:0 0 0 4px rgba(255,93,143,0.14);
+  }
+  #phrase:focus{box-shadow:0 0 0 5px rgba(255,93,143,0.22);}
+  label[for="phrase"]{
+    color:var(--accent);
+    font-weight:700;
+    font-size:0.85rem;
+  }
   select:focus, textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
   textarea{resize:vertical;min-height:64px;}
 
@@ -183,7 +193,8 @@
     padding:10px 8px 6px;
     background:var(--surface-2);
   }
-  .target-slot select{border:none;background:transparent;padding:2px;font-size:0.82rem;}
+  .target-slot select{border:none;background:var(--surface-2);padding:2px;font-size:0.82rem;}
+  select option{background:var(--surface-2);color:var(--text);}
 
   button{
     font-family:'Inter', sans-serif;
@@ -203,7 +214,29 @@
   .btn-danger{background:transparent;color:var(--stamp-1);font-size:0.8rem;padding:6px 10px;}
 
   /* Carrusel horizontal deslizable de traducciones (estilo stories) */
-  .stamps-wrap{margin-top:18px;}
+  .stamps-wrap{margin-top:18px;position:relative;}
+  .carousel-arrow{
+    position:absolute;
+    top:38%;
+    transform:translateY(-50%);
+    width:34px;height:34px;
+    border-radius:50%;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-size:1.3rem;
+    line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    z-index:2;
+    padding:0;
+  }
+  .carousel-arrow:hover{border-color:var(--accent);color:var(--accent);}
+  .carousel-arrow.left{left:-8px;}
+  .carousel-arrow.right{right:-8px;}
+  @media (max-width:520px){
+    .carousel-arrow{width:28px;height:28px;font-size:1.1rem;}
+  }
   .stamps{
     display:flex;
     gap:12px;
@@ -324,11 +357,12 @@
     <div class="row">
       <div>
         <label for="source">Idioma de origen</label>
-        <div class="lang-preview" id="sourcePreview">🇪🇸</div>
+        <div class="lang-preview" id="sourcePreview">🌐</div>
         <select id="source"></select>
+        <div id="detectedNote" style="font-size:0.72rem;color:var(--accent-2);margin-top:4px;min-height:1.1em;"></div>
       </div>
       <div style="flex:2;">
-        <label for="phrase">Palabra o frase</label>
+        <label for="phrase">✍️ Escribe aquí lo que quieras traducir</label>
         <div style="display:flex;gap:8px;align-items:flex-start;">
           <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
           <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--gold);color:#fff;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
@@ -345,7 +379,9 @@
     <div class="status" id="status"></div>
 
     <div class="stamps-wrap">
+      <button type="button" class="carousel-arrow left" id="prevStamp" aria-label="Anterior">‹</button>
       <div class="stamps" id="stamps"></div>
+      <button type="button" class="carousel-arrow right" id="nextStamp" aria-label="Siguiente">›</button>
       <div class="dots" id="stampDots"></div>
     </div>
   </div>
@@ -399,16 +435,32 @@ const FLAG = {
 };
 function langName(code){ const f = LANGS.find(l=>l[0]===code); return f ? f[1] : code; }
 
-function fillSelect(sel, selected){
-  sel.innerHTML = LANGS.map(([code,name]) =>
+function fillSelect(sel, selected, includeAuto){
+  let html = '';
+  if(includeAuto){
+    html += `<option value="auto" ${selected==='auto'?'selected':''}>🌐 Detectar automáticamente</option>`;
+  }
+  html += LANGS.map(([code,name]) =>
     `<option value="${code}" ${code===selected?'selected':''}>${FLAG[code]||''} ${name}</option>`
   ).join('');
+  sel.innerHTML = html;
 }
 
-fillSelect(sourceSel, 'es');
+fillSelect(sourceSel, 'auto', true);
 sourceSel.addEventListener('change', () => {
-  document.getElementById('sourcePreview').textContent = FLAG[sourceSel.value] || '🌐';
+  document.getElementById('sourcePreview').textContent = sourceSel.value === 'auto' ? '🌐' : (FLAG[sourceSel.value] || '🌐');
+  document.getElementById('detectedNote').textContent = '';
 });
+
+async function detectLanguage(text){
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('fallo deteccion');
+  const data = await res.json();
+  const code = data && data[2];
+  if(!code) throw new Error('sin deteccion');
+  return code;
+}
 for(let i=0;i<4;i++){
   const wrap = document.createElement('div');
   wrap.className = 'target-slot';
@@ -553,6 +605,23 @@ function setupCarouselSync(){
   };
 }
 
+// Flechas para PC (donde no hay deslizamiento táctil)
+document.getElementById('prevStamp').addEventListener('click', () => {
+  const cardWidth = stampsDiv.children[0] ? stampsDiv.children[0].offsetWidth + 12 : 200;
+  stampsDiv.scrollBy({left: -cardWidth, behavior: 'smooth'});
+});
+document.getElementById('nextStamp').addEventListener('click', () => {
+  const cardWidth = stampsDiv.children[0] ? stampsDiv.children[0].offsetWidth + 12 : 200;
+  stampsDiv.scrollBy({left: cardWidth, behavior: 'smooth'});
+});
+// Rueda del mouse: convierte el scroll vertical del mouse en desplazamiento horizontal
+stampsDiv.addEventListener('wheel', (e) => {
+  if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){
+    e.preventDefault();
+    stampsDiv.scrollLeft += e.deltaY;
+  }
+}, {passive:false});
+
 async function doTranslate(){
   const text = document.getElementById('phrase').value.trim();
   if(!text){
@@ -560,11 +629,28 @@ async function doTranslate(){
     statusDiv.textContent = '';
     return;
   }
-  const source = sourceSel.value;
   const targets = [0,1,2,3].map(i => document.getElementById('target'+i).value);
 
   const runId = ++lastRunId; // evita que respuestas viejas pisen resultados nuevos
   usedOfflineFallback = false;
+
+  let source = sourceSel.value;
+  const detectedNote = document.getElementById('detectedNote');
+  if(source === 'auto'){
+    statusDiv.textContent = 'Detectando idioma…';
+    try{
+      source = await detectLanguage(text);
+      if(runId !== lastRunId) return;
+      if(!LANGS.find(l => l[0] === source)) source = 'es'; // idioma detectado no soportado, usamos español
+      detectedNote.textContent = 'Detectado: ' + (FLAG[source]||'') + ' ' + langName(source);
+    }catch(e){
+      source = 'es'; // en la vista previa sin internet, usamos español por defecto
+      detectedNote.textContent = 'No se pudo detectar (sin conexión en la vista previa), usando Español';
+    }
+  } else {
+    detectedNote.textContent = '';
+  }
+
   statusDiv.textContent = 'Traduciendo en tiempo real…';
 
   stampsDiv.innerHTML = targets.map((t,i) => `
@@ -771,7 +857,8 @@ if(!SpeechRecognitionAPI){
   recognition.addEventListener('start', () => {
     listening = true;
     micBtn.textContent = '⏺️';
-    micStatus.textContent = 'Escuchando… habla ahora en ' + langName(sourceSel.value);
+    const spokenLangLabel = sourceSel.value === 'auto' ? 'cualquier idioma' : langName(sourceSel.value);
+    micStatus.textContent = 'Escuchando… habla ahora en ' + spokenLangLabel;
   });
 
   recognition.addEventListener('result', (event) => {
