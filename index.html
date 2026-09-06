@@ -370,6 +370,40 @@
   .phrase-item:hover{border-color:var(--accent);}
   .phrase-item:active{transform:scale(0.98);}
 
+  .sign-board{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));
+    gap:10px;
+  }
+  .sign-tile{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px 6px 10px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    cursor:pointer;
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+  }
+  .sign-tile:hover{border-color:var(--accent);}
+  .sign-tile:active{transform:scale(0.95);}
+  .sign-tile .emoji{font-size:1.9rem;}
+  .sign-tile .label{font-size:0.72rem;text-align:center;line-height:1.15;}
+
+  .sign-link{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    font-size:0.78rem;
+    color:var(--accent-2);
+    text-decoration:none;
+    margin-top:8px;
+    border:1px solid var(--accent-2);
+    border-radius:20px;
+    padding:5px 12px;
+  }
+  .sign-link:hover{background:rgba(34,211,238,0.1);}
+
   /* Ajustes específicos para pantalla de celular */
   @media (max-width: 520px){
     body{padding:18px 12px 50px;}
@@ -440,6 +474,12 @@
       <button type="button" class="carousel-arrow right" id="nextCat" aria-label="Categoría siguiente">›</button>
     </div>
     <div class="phrase-list" id="phraseList"></div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">🤟 Comunicación visual</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin:-8px 0 14px;">Para personas sordomudas o con dificultad para hablar: toca un ícono grande para mostrar la palabra en pantalla (y traducirla), y usa "Ver en lengua de señas" para ver el video real en el lenguaje de señas de ese país.</p>
+    <div class="sign-board" id="signBoard"></div>
   </div>
 
   <div class="panel">
@@ -747,6 +787,14 @@ async function doTranslate(){
       stampEl.appendChild(playBtn);
       stampEl.appendChild(copyBtn);
       stampEl.classList.remove('loading');
+
+      const signLink = document.createElement('a');
+      signLink.className = 'sign-link';
+      signLink.href = signLanguageUrl(translated.replace(/\s\*$/, ''));
+      signLink.target = '_blank';
+      signLink.rel = 'noopener';
+      signLink.textContent = '🤟 Ver en lengua de señas';
+      stampsDiv.children[i].appendChild(signLink);
     }catch(e){
       if(runId !== lastRunId) return;
       results[i] = null;
@@ -1005,6 +1053,33 @@ catsDiv.addEventListener('wheel', (e) => {
     catsDiv.scrollLeft += e.deltaY;
   }
 }, {passive:false});
+
+const SIGN_BOARD_ITEMS = [
+  {emoji:"💧", label:"Agua"}, {emoji:"🍽️", label:"Comida"}, {emoji:"🚻", label:"Baño"},
+  {emoji:"🤕", label:"Dolor"}, {emoji:"🆘", label:"Ayuda"}, {emoji:"👨‍⚕️", label:"Doctor"},
+  {emoji:"✅", label:"Sí"}, {emoji:"❌", label:"No"}, {emoji:"🥶", label:"Frío"},
+  {emoji:"🥵", label:"Calor"}, {emoji:"😴", label:"Cansado"}, {emoji:"😊", label:"Feliz"},
+  {emoji:"😢", label:"Triste"}, {emoji:"🚨", label:"Emergencia"}, {emoji:"👮", label:"Policía"},
+  {emoji:"👪", label:"Familia"}, {emoji:"💰", label:"Dinero"}, {emoji:"📱", label:"Teléfono"},
+  {emoji:"🙏", label:"Gracias"}, {emoji:"🤲", label:"Por favor"}
+];
+
+const signBoardDiv = document.getElementById('signBoard');
+signBoardDiv.innerHTML = SIGN_BOARD_ITEMS.map(item =>
+  `<button type="button" class="sign-tile"><span class="emoji">${item.emoji}</span><span class="label">${item.label}</span></button>`
+).join('');
+signBoardDiv.querySelectorAll('.sign-tile').forEach((tile, i) => {
+  tile.addEventListener('click', () => {
+    const phraseBox = document.getElementById('phrase');
+    phraseBox.value = SIGN_BOARD_ITEMS[i].label;
+    phraseBox.dispatchEvent(new Event('input'));
+    phraseBox.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+});
+
+function signLanguageUrl(word){
+  return `https://www.spreadthesign.com/en.us/search/?q=${encodeURIComponent(word)}`;
+}
 
 loadVocab();
 
