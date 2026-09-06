@@ -404,6 +404,34 @@
   }
   .sign-link:hover{background:rgba(34,211,238,0.1);}
 
+  .conv-langs{display:flex;gap:12px;margin-bottom:14px;}
+  .conv-langs > div{flex:1;}
+  .conv-bubbles{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+  .conv-bubble{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    min-height:50px;
+    font-size:1.05rem;
+    color:var(--text);
+  }
+  .conv-bubble.empty{color:var(--text-dim);font-style:italic;font-size:0.9rem;}
+  .conv-mics{display:flex;gap:10px;}
+  .btn-conv-mic{
+    flex:1;
+    background:var(--surface-2);
+    border:1.5px solid var(--stamp-4);
+    color:var(--text);
+  }
+  .btn-conv-mic.listening{
+    background:var(--stamp-4);
+    color:#0A0C0A;
+  }
+  @media (max-width:520px){
+    .conv-langs{flex-direction:column;}
+  }
+
   /* Ajustes específicos para pantalla de celular */
   @media (max-width: 520px){
     body{padding:18px 12px 50px;}
@@ -418,6 +446,8 @@
     #micBtn{width:auto;padding:12px 16px;}
   }
 </style>
+<script data-goatcounter="https://ollkorect.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -436,6 +466,21 @@
     </div>
   </header>
 
+  <div class="panel" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+    <div style="flex:1;min-width:150px;">
+      <label for="textSizeSelect">🔠 Tamaño de texto</label>
+      <select id="textSizeSelect">
+        <option value="100">Normal</option>
+        <option value="115">Grande</option>
+        <option value="130">Muy grande</option>
+      </select>
+    </div>
+    <div style="flex:1;min-width:150px;display:flex;align-items:center;gap:8px;margin-top:18px;">
+      <input type="checkbox" id="vibrationToggle" checked style="width:19px;height:19px;accent-color:var(--accent);">
+      <label for="vibrationToggle" style="margin:0;cursor:pointer;">📳 Vibrar al tocar</label>
+    </div>
+  </div>
+
   <div class="panel">
     <div class="row">
       <div>
@@ -448,8 +493,11 @@
         <label for="phrase">✍️ Escribe aquí lo que quieras traducir</label>
         <div style="display:flex;gap:8px;align-items:flex-start;">
           <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
-          <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--gold);color:#fff;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
+          <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--stamp-4);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
+          <button id="cameraBtn" type="button" title="Traducir texto de una foto" style="background:var(--accent-2);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">📷</button>
         </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+        <div id="ocrStatus" style="font-size:0.78rem;color:var(--accent-2);margin-top:4px;min-height:1.1em;"></div>
         <div id="charCount" style="font-size:0.72rem;color:#9a927a;margin-top:2px;text-align:right;">0 / 500</div>
         <div id="micStatus" style="font-size:0.78rem;color:#8C3B2E;margin-top:4px;min-height:1.1em;"></div>
       </div>
@@ -466,6 +514,29 @@
       <div class="stamps" id="stamps"></div>
       <button type="button" class="carousel-arrow right" id="nextStamp" aria-label="Siguiente">›</button>
       <div class="dots" id="stampDots"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">🗣️ Modo conversación</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin:-8px 0 14px;">Para hablar cara a cara con alguien: cada quien elige su idioma, toca su micrófono para hablar, y el otro escucha la traducción en voz alta automáticamente.</p>
+    <div class="conv-langs">
+      <div>
+        <label>Persona A habla</label>
+        <select id="convLangA"></select>
+      </div>
+      <div>
+        <label>Persona B habla</label>
+        <select id="convLangB"></select>
+      </div>
+    </div>
+    <div class="conv-bubbles">
+      <div class="conv-bubble" id="bubbleA">Toca el micrófono para hablar</div>
+      <div class="conv-bubble" id="bubbleB">Toca el micrófono para hablar</div>
+    </div>
+    <div class="conv-mics">
+      <button type="button" class="btn-conv-mic" id="convMicA">🎤 Persona A</button>
+      <button type="button" class="btn-conv-mic" id="convMicB">🎤 Persona B</button>
     </div>
   </div>
 
@@ -511,6 +582,30 @@ const storage = {
     }catch(e){ return null; }
   }
 };
+
+// Accesibilidad: tamaño de texto y vibración, con preferencia guardada en el celular
+const textSizeSelect = document.getElementById('textSizeSelect');
+const vibrationToggle = document.getElementById('vibrationToggle');
+
+const savedTextSize = localStorage.getItem('textSize') || '100';
+document.documentElement.style.fontSize = savedTextSize + '%';
+textSizeSelect.value = savedTextSize;
+textSizeSelect.addEventListener('change', () => {
+  document.documentElement.style.fontSize = textSizeSelect.value + '%';
+  localStorage.setItem('textSize', textSizeSelect.value);
+});
+
+const savedVibration = localStorage.getItem('vibration');
+vibrationToggle.checked = savedVibration === null ? true : savedVibration === 'true';
+vibrationToggle.addEventListener('change', () => {
+  localStorage.setItem('vibration', vibrationToggle.checked);
+});
+
+function haptic(){
+  if(vibrationToggle.checked && navigator.vibrate){
+    navigator.vibrate(15);
+  }
+}
 
 const LANGS = [
   ["es","Español"],["en","Inglés"],["fr","Francés"],["pt","Portugués"],
@@ -711,6 +806,78 @@ function togglePlayPause(text, langCode, btn){
   synth.speak(utter);
 }
 
+// Igual que arriba, pero se reproduce sola de inmediato (para el modo conversación)
+function autoSpeak(text, langCode){
+  if(!('speechSynthesis' in window)) return;
+  const synth = window.speechSynthesis;
+  synth.cancel();
+  if(activeSpeechBtn){ activeSpeechBtn.textContent = '🔊'; activeSpeechBtn = null; }
+  const targetLocale = SPEECH_LOCALE[langCode] || langCode;
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = targetLocale;
+  utter.rate = 0.85;
+  if(!voicesReady.length) loadVoices();
+  const match = voicesReady.find(v => v.lang === targetLocale) ||
+                voicesReady.find(v => v.lang.startsWith(targetLocale.split('-')[0]));
+  if(match) utter.voice = match;
+  synth.speak(utter);
+}
+
+// Modo conversación: dos micrófonos, cada uno traduce hacia el idioma del otro
+fillSelect(document.getElementById('convLangA'), 'es', false);
+fillSelect(document.getElementById('convLangB'), 'en', false);
+
+function setConvBubble(id, text, isEmpty){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.classList.toggle('empty', !!isEmpty);
+}
+
+function setupConvMic(micBtnId, speakerSelectId, listenerSelectId, ownBubbleId, otherBubbleId){
+  const btn = document.getElementById(micBtnId);
+  if(!SpeechRecognitionAPIGlobal){
+    btn.disabled = true;
+    btn.title = 'Tu navegador no soporta dictado por voz';
+    return;
+  }
+  const recognition = new SpeechRecognitionAPIGlobal();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  btn.addEventListener('click', () => {
+    const speakerLang = document.getElementById(speakerSelectId).value;
+    recognition.lang = SPEECH_LOCALE[speakerLang] || 'es-ES';
+    try{ recognition.start(); }catch(e){ /* ya estaba escuchando */ }
+  });
+  recognition.addEventListener('start', () => {
+    btn.classList.add('listening');
+    setConvBubble(ownBubbleId, '🎤 Escuchando…', true);
+  });
+  recognition.addEventListener('end', () => btn.classList.remove('listening'));
+  recognition.addEventListener('error', () => {
+    btn.classList.remove('listening');
+    setConvBubble(ownBubbleId, 'No se detectó voz, intenta de nuevo', true);
+  });
+  recognition.addEventListener('result', async (event) => {
+    const said = event.results[0][0].transcript;
+    setConvBubble(ownBubbleId, said, false);
+    const speakerLang = document.getElementById(speakerSelectId).value;
+    const listenerLang = document.getElementById(listenerSelectId).value;
+    setConvBubble(otherBubbleId, 'Traduciendo…', true);
+    try{
+      const translated = await translateOne(said, speakerLang, listenerLang);
+      setConvBubble(otherBubbleId, translated.replace(/\s\*$/, ''), false);
+      autoSpeak(translated, listenerLang);
+    }catch(e){
+      setConvBubble(otherBubbleId, 'No se pudo traducir', true);
+    }
+  });
+}
+
+const SpeechRecognitionAPIGlobal = window.SpeechRecognition || window.webkitSpeechRecognition;
+setupConvMic('convMicA', 'convLangA', 'convLangB', 'bubbleA', 'bubbleB');
+setupConvMic('convMicB', 'convLangB', 'convLangA', 'bubbleB', 'bubbleA');
+
 function copyText(text, btn){
   const cleanText = text.replace(/\s\*$/, '');
   navigator.clipboard.writeText(cleanText).then(() => {
@@ -869,9 +1036,24 @@ async function doTranslate(){
     });
   });
   statusDiv.appendChild(copyAllBtn);
+
+  const shareBtn = document.createElement('button');
+  shareBtn.className = 'btn-ghost';
+  shareBtn.textContent = '📤 Compartir';
+  shareBtn.style.cssText = 'margin-top:4px;margin-left:8px;';
+  shareBtn.addEventListener('click', () => {
+    haptic();
+    const allText = targets.map((t,i) => results[i] ? `${langName(t)}: ${results[i].replace(/\s\*$/,'')}` : '').filter(Boolean).join('\n');
+    if(navigator.share){
+      navigator.share({title:'Traducción', text: allText}).catch(()=>{});
+    } else {
+      window.location.href = 'https://wa.me/?text=' + encodeURIComponent(allText);
+    }
+  });
+  statusDiv.appendChild(shareBtn);
 }
 
-document.getElementById('translateBtn').addEventListener('click', doTranslate);
+document.getElementById('translateBtn').addEventListener('click', () => { haptic(); doTranslate(); });
 
 // Traducción en tiempo real: se dispara sola una fracción de segundo
 // después de dejar de escribir, sin necesidad de tocar el botón.
@@ -936,6 +1118,7 @@ async function loadVocab(){
         <div class="hint">toca para voltear</div>
       </div>
       <div class="postcard-footer">
+        <button class="btn-ghost" data-share="${entry.id}" style="padding:6px 10px;font-size:0.8rem;margin-right:6px;">📤 Compartir</button>
         <button class="btn-danger" data-del="${entry.id}">eliminar</button>
       </div>
     </div>
@@ -943,8 +1126,26 @@ async function loadVocab(){
 
   vocabListDiv.querySelectorAll('.postcard').forEach(card => {
     card.addEventListener('click', (e) => {
-      if(e.target.dataset.del) return;
+      if(e.target.dataset.del || e.target.dataset.share) return;
       card.classList.toggle('flipped');
+    });
+  });
+  vocabListDiv.querySelectorAll('[data-share]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      haptic();
+      const id = btn.dataset.share;
+      const res = await storage.get('vocab-list');
+      const list = res ? JSON.parse(res.value) : [];
+      const entry = list.find(x => x.id === id);
+      if(!entry) return;
+      const text = `${langName(entry.source)}: ${entry.text}\n` +
+        entry.translations.map(t => `${langName(t.lang)}: ${t.text}`).join('\n');
+      if(navigator.share){
+        navigator.share({title:'Vocabulario', text}).catch(()=>{});
+      } else {
+        window.location.href = 'https://wa.me/?text=' + encodeURIComponent(text);
+      }
     });
   });
   vocabListDiv.querySelectorAll('[data-del]').forEach(btn => {
@@ -1060,6 +1261,7 @@ function renderPhraseCategory(catName){
   ).join('');
   phraseListDiv.querySelectorAll('.phrase-item').forEach(btn => {
     btn.addEventListener('click', () => {
+      haptic();
       const phraseBox = document.getElementById('phrase');
       phraseBox.value = btn.textContent;
       phraseBox.dispatchEvent(new Event('input'));
@@ -1072,7 +1274,7 @@ catsDiv.innerHTML = categoryNames.map((c,i) =>
   `<button type="button" class="cat-chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`
 ).join('');
 catsDiv.querySelectorAll('.cat-chip').forEach(chip => {
-  chip.addEventListener('click', () => renderPhraseCategory(chip.dataset.cat));
+  chip.addEventListener('click', () => { haptic(); renderPhraseCategory(chip.dataset.cat); });
 });
 renderPhraseCategory(categoryNames[0]);
 
@@ -1106,6 +1308,7 @@ signBoardDiv.innerHTML = SIGN_BOARD_ITEMS.map(item =>
 ).join('');
 signBoardDiv.querySelectorAll('.sign-tile').forEach((tile, i) => {
   tile.addEventListener('click', () => {
+    haptic();
     const phraseBox = document.getElementById('phrase');
     phraseBox.value = SIGN_BOARD_ITEMS[i].label;
     phraseBox.dispatchEvent(new Event('input'));
@@ -1127,6 +1330,60 @@ function updateOfflineBanner(){
 window.addEventListener('online', updateOfflineBanner);
 window.addEventListener('offline', updateOfflineBanner);
 updateOfflineBanner();
+
+// Traducir con la cámara: usa OCR (lectura de texto en imágenes) que se
+// carga solo la primera vez que se toca el botón, para no hacer la app
+// pesada de entrada. Necesita conexión a internet la primera vez.
+const cameraBtn = document.getElementById('cameraBtn');
+const cameraInput = document.getElementById('cameraInput');
+const ocrStatus = document.getElementById('ocrStatus');
+let tesseractLoading = null;
+
+function loadTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tesseractLoading) return tesseractLoading;
+  tesseractLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('no se pudo cargar el lector de texto'));
+    document.head.appendChild(script);
+  });
+  return tesseractLoading;
+}
+
+cameraBtn.addEventListener('click', () => cameraInput.click());
+
+cameraInput.addEventListener('change', async () => {
+  const file = cameraInput.files[0];
+  if(!file) return;
+  ocrStatus.textContent = 'Preparando el lector de texto…';
+  try{
+    await loadTesseract();
+    ocrStatus.textContent = 'Leyendo el texto de la imagen… 0%';
+    const result = await window.Tesseract.recognize(file, 'eng', {
+      logger: (m) => {
+        if(m.status === 'recognizing text'){
+          ocrStatus.textContent = 'Leyendo el texto de la imagen… ' + Math.round(m.progress*100) + '%';
+        }
+      }
+    });
+    const text = result.data.text.replace(/\s+/g, ' ').trim();
+    if(!text){
+      ocrStatus.textContent = 'No se detectó texto en la foto, intenta con otra más clara.';
+      return;
+    }
+    const phraseBox = document.getElementById('phrase');
+    phraseBox.value = text.slice(0, 500);
+    sourceSel.value = 'auto';
+    document.getElementById('sourcePreview').textContent = '🌐';
+    phraseBox.dispatchEvent(new Event('input'));
+    ocrStatus.textContent = '✅ Texto detectado, traduciendo…';
+  }catch(e){
+    ocrStatus.textContent = 'No se pudo leer la imagen (necesitas conexión a internet la primera vez que usas la cámara).';
+  }
+  cameraInput.value = '';
+});
 
 // Dictado por voz: usa el reconocimiento de voz del navegador (Chrome en
 // Android lo soporta bien). Requiere permiso de micrófono y, en un sitio
