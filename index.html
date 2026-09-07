@@ -1357,20 +1357,24 @@ cameraBtn.addEventListener('click', () => cameraInput.click());
 cameraInput.addEventListener('change', async () => {
   const file = cameraInput.files[0];
   if(!file) return;
-  ocrStatus.textContent = 'Preparando el lector de texto…';
+  ocrStatus.textContent = 'Preparando el lector de texto (puede tardar un poco la primera vez)…';
   try{
     await loadTesseract();
     ocrStatus.textContent = 'Leyendo el texto de la imagen… 0%';
-    const result = await window.Tesseract.recognize(file, 'eng', {
+    // Reconoce varios idiomas a la vez (incluye acentos y letras especiales
+    // del español, francés, italiano, portugués y alemán)
+    const result = await window.Tesseract.recognize(file, 'eng+spa+fra+ita+por+deu', {
       logger: (m) => {
         if(m.status === 'recognizing text'){
           ocrStatus.textContent = 'Leyendo el texto de la imagen… ' + Math.round(m.progress*100) + '%';
+        } else if(m.status && m.status.includes('loading')){
+          ocrStatus.textContent = 'Descargando el lector de idiomas…';
         }
       }
     });
     const text = result.data.text.replace(/\s+/g, ' ').trim();
-    if(!text){
-      ocrStatus.textContent = 'No se detectó texto en la foto, intenta con otra más clara.';
+    if(!text || text.length < 2){
+      ocrStatus.textContent = 'No se detectó texto claro. Intenta con más luz, de más cerca y sin ángulo.';
       return;
     }
     const phraseBox = document.getElementById('phrase');
@@ -1378,7 +1382,7 @@ cameraInput.addEventListener('change', async () => {
     sourceSel.value = 'auto';
     document.getElementById('sourcePreview').textContent = '🌐';
     phraseBox.dispatchEvent(new Event('input'));
-    ocrStatus.textContent = '✅ Texto detectado, traduciendo…';
+    ocrStatus.textContent = '✅ Texto detectado: "' + text.slice(0,60) + (text.length>60?'…':'') + '"';
   }catch(e){
     ocrStatus.textContent = 'No se pudo leer la imagen (necesitas conexión a internet la primera vez que usas la cámara).';
   }
