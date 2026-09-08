@@ -495,6 +495,7 @@
           <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
           <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--stamp-4);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
           <button id="cameraBtn" type="button" title="Traducir texto de una foto" style="background:var(--accent-2);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">📷</button>
+          <button id="clearBtn" type="button" title="Borrar texto" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🗑️</button>
         </div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
         <div id="ocrStatus" style="font-size:0.78rem;color:var(--accent-2);margin-top:4px;min-height:1.1em;"></div>
@@ -605,6 +606,22 @@ function haptic(){
   if(vibrationToggle.checked && navigator.vibrate){
     navigator.vibrate(15);
   }
+}
+
+// Autocompleta el campo de texto, pero si ya había algo escrito distinto,
+// primero pregunta si se desea reemplazar (para no perder texto sin querer).
+function fillPhraseWithConfirm(newText){
+  const phraseBox = document.getElementById('phrase');
+  const current = phraseBox.value.trim();
+  if(current && current !== newText.trim()){
+    const proceed = confirm('Ya tienes un texto escrito:\n"' + current + '"\n\n¿Deseas reemplazarlo por "' + newText + '"?');
+    if(!proceed) return;
+  }
+  phraseBox.value = newText;
+  document.getElementById('charCount').textContent = newText.length + ' / 500';
+  localStorage.setItem('currentPhrase', newText);
+  phraseBox.dispatchEvent(new Event('input'));
+  phraseBox.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 const LANGS = [
@@ -1059,10 +1076,12 @@ document.getElementById('translateBtn').addEventListener('click', () => { haptic
 // después de dejar de escribir, sin necesidad de tocar el botón.
 let debounceTimer = null;
 document.getElementById('phrase').addEventListener('input', () => {
-  const len = document.getElementById('phrase').value.length;
+  const val = document.getElementById('phrase').value;
+  const len = val.length;
   const counter = document.getElementById('charCount');
   counter.textContent = len + ' / 500';
   counter.style.color = len > 450 ? '#8C3B2E' : '#9a927a';
+  localStorage.setItem('currentPhrase', val); // no se pierde al salir o actualizar
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(doTranslate, 500);
 });
@@ -1071,6 +1090,29 @@ sourceSel.addEventListener('change', doTranslate);
   document.addEventListener('change', (e) => {
     if(e.target && e.target.id === 'target'+i) doTranslate();
   });
+});
+
+// Restaurar el texto guardado (si lo había) al abrir la app de nuevo
+const savedPhrase = localStorage.getItem('currentPhrase');
+if(savedPhrase && savedPhrase.trim()){
+  const phraseBoxInit = document.getElementById('phrase');
+  phraseBoxInit.value = savedPhrase;
+  document.getElementById('charCount').textContent = savedPhrase.length + ' / 500';
+  phraseBoxInit.dispatchEvent(new Event('input'));
+}
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  const phraseBox = document.getElementById('phrase');
+  if(!phraseBox.value.trim()) return;
+  const proceed = confirm('¿Seguro que deseas borrar el texto actual?');
+  if(!proceed) return;
+  haptic();
+  phraseBox.value = '';
+  document.getElementById('charCount').textContent = '0 / 500';
+  localStorage.removeItem('currentPhrase');
+  stampsDiv.innerHTML = '';
+  document.getElementById('stampDots').innerHTML = '';
+  statusDiv.textContent = '';
 });
 
 async function saveEntry(text, source, targets, results, btnEl){
@@ -1262,10 +1304,7 @@ function renderPhraseCategory(catName){
   phraseListDiv.querySelectorAll('.phrase-item').forEach(btn => {
     btn.addEventListener('click', () => {
       haptic();
-      const phraseBox = document.getElementById('phrase');
-      phraseBox.value = btn.textContent;
-      phraseBox.dispatchEvent(new Event('input'));
-      phraseBox.scrollIntoView({behavior:'smooth', block:'center'});
+      fillPhraseWithConfirm(btn.textContent);
     });
   });
 }
@@ -1309,10 +1348,7 @@ signBoardDiv.innerHTML = SIGN_BOARD_ITEMS.map(item =>
 signBoardDiv.querySelectorAll('.sign-tile').forEach((tile, i) => {
   tile.addEventListener('click', () => {
     haptic();
-    const phraseBox = document.getElementById('phrase');
-    phraseBox.value = SIGN_BOARD_ITEMS[i].label;
-    phraseBox.dispatchEvent(new Event('input'));
-    phraseBox.scrollIntoView({behavior:'smooth', block:'center'});
+    fillPhraseWithConfirm(SIGN_BOARD_ITEMS[i].label);
   });
 });
 
