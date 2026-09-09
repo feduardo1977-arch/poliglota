@@ -462,7 +462,7 @@
       <p>Escribe y mira la traducción aparecer sola en 4 idiomas a la vez, con audio de pronunciación. Guarda las que quieras repasar.</p>
     </div>
     <div class="flag-wave">
-      <span>🇪🇸</span><span>🇬🇧</span><span>🇫🇷</span><span>🇯🇵</span><span>🇧🇷</span>
+      <span>🇬🇧</span><span>🇮🇹</span><span>🇵🇹</span><span>🇫🇷</span>
     </div>
   </header>
 
@@ -491,14 +491,17 @@
       </div>
       <div style="flex:2;">
         <label for="phrase">✍️ Escribe aquí lo que quieras traducir</label>
-        <div style="display:flex;gap:8px;align-items:flex-start;">
-          <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="flex:1;"></textarea>
-          <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--stamp-4);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🎤</button>
-          <button id="cameraBtn" type="button" title="Traducir texto de una foto" style="background:var(--accent-2);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex-shrink:0;">📷</button>
-          <button id="clearBtn" type="button" title="Borrar texto" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 14px;font-size:1.1rem;flex-shrink:0;">🗑️</button>
+        <textarea id="phrase" maxlength="500" placeholder="Empieza a escribir… se traduce solo" style="width:100%;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button id="micBtn" type="button" title="Dictar por voz" style="background:var(--stamp-4);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex:1;min-width:60px;">🎤</button>
+          <button id="cameraBtn" type="button" title="Traducir texto de una foto" style="background:var(--accent-2);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex:1;min-width:60px;">📷</button>
+          <button id="pdfBtn" type="button" title="Traducir texto de un PDF" style="background:var(--stamp-3);color:#0A0C0A;padding:10px 14px;font-size:1.1rem;flex:1;min-width:60px;">📄</button>
+          <button id="clearBtn" type="button" title="Borrar texto" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 14px;font-size:1.1rem;flex:1;min-width:60px;">🗑️</button>
         </div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;">
+        <input type="file" id="pdfInput" accept="application/pdf" style="display:none;">
         <div id="ocrStatus" style="font-size:0.78rem;color:var(--accent-2);margin-top:4px;min-height:1.1em;"></div>
+        <div id="pdfStatus" style="font-size:0.78rem;color:var(--stamp-3);margin-top:2px;min-height:1.1em;"></div>
         <div id="charCount" style="font-size:0.72rem;color:#9a927a;margin-top:2px;text-align:right;">0 / 500</div>
         <div id="micStatus" style="font-size:0.78rem;color:#8C3B2E;margin-top:4px;min-height:1.1em;"></div>
       </div>
@@ -644,7 +647,7 @@ const SPEECH_LOCALE = {
   id:"id-ID", ro:"ro-RO", hu:"hu-HU", uk:"uk-UA", bg:"bg-BG", sk:"sk-SK",
   fa:"fa-IR", bn:"bn-BD", ta:"ta-IN", sw:"sw-KE", ca:"ca-ES", gl:"gl-ES"
 };
-const DEFAULT_TARGETS = ["en","fr","pt","it"];
+const DEFAULT_TARGETS = ["en","it","pt","fr"];
 const STAMP_COLORS = ["--stamp-1","--stamp-2","--stamp-3","--stamp-4"];
 
 const sourceSel = document.getElementById('source');
@@ -1375,6 +1378,52 @@ const cameraInput = document.getElementById('cameraInput');
 const ocrStatus = document.getElementById('ocrStatus');
 let tesseractLoading = null;
 
+// Mejora la foto antes de leerla: escala de grises + más contraste.
+// Esto es lo que más ayuda a que el lector de texto acierte con fotos
+// tomadas con poca luz, sombras o ángulo.
+function preprocessImage(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1800;
+      let width = img.naturalWidth, height = img.naturalHeight;
+      if(width > maxDim || height > maxDim){
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+
+      // Escala de grises
+      const gray = new Float32Array(width * height);
+      let min = 255, max = 0;
+      for(let i = 0, p = 0; i < data.length; i += 4, p++){
+        const g = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+        gray[p] = g;
+        if(g < min) min = g;
+        if(g > max) max = g;
+      }
+      // Estirar el contraste (usa todo el rango de 0 a 255)
+      const range = Math.max(max - min, 1);
+      for(let i = 0, p = 0; i < data.length; i += 4, p++){
+        const v = Math.min(255, Math.max(0, ((gray[p] - min) * 255) / range));
+        data[i] = data[i+1] = data[i+2] = v;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('no se pudo procesar la imagen')), 'image/png');
+    };
+    img.onerror = () => reject(new Error('no se pudo cargar la imagen'));
+    img.src = url;
+  });
+}
+
 function loadTesseract(){
   if(window.Tesseract) return Promise.resolve();
   if(tesseractLoading) return tesseractLoading;
@@ -1393,13 +1442,15 @@ cameraBtn.addEventListener('click', () => cameraInput.click());
 cameraInput.addEventListener('change', async () => {
   const file = cameraInput.files[0];
   if(!file) return;
-  ocrStatus.textContent = 'Preparando el lector de texto (puede tardar un poco la primera vez)…';
+  ocrStatus.textContent = 'Mejorando la foto (contraste)…';
   try{
+    const processedImage = await preprocessImage(file);
+    ocrStatus.textContent = 'Preparando el lector de texto (puede tardar un poco la primera vez)…';
     await loadTesseract();
     ocrStatus.textContent = 'Leyendo el texto de la imagen… 0%';
     // Reconoce varios idiomas a la vez (incluye acentos y letras especiales
     // del español, francés, italiano, portugués y alemán)
-    const result = await window.Tesseract.recognize(file, 'eng+spa+fra+ita+por+deu', {
+    const result = await window.Tesseract.recognize(processedImage, 'eng+spa+fra+ita+por+deu', {
       logger: (m) => {
         if(m.status === 'recognizing text'){
           ocrStatus.textContent = 'Leyendo el texto de la imagen… ' + Math.round(m.progress*100) + '%';
@@ -1413,16 +1464,71 @@ cameraInput.addEventListener('change', async () => {
       ocrStatus.textContent = 'No se detectó texto claro. Intenta con más luz, de más cerca y sin ángulo.';
       return;
     }
-    const phraseBox = document.getElementById('phrase');
-    phraseBox.value = text.slice(0, 500);
     sourceSel.value = 'auto';
     document.getElementById('sourcePreview').textContent = '🌐';
-    phraseBox.dispatchEvent(new Event('input'));
+    fillPhraseWithConfirm(text.slice(0, 500));
     ocrStatus.textContent = '✅ Texto detectado: "' + text.slice(0,60) + (text.length>60?'…':'') + '"';
   }catch(e){
     ocrStatus.textContent = 'No se pudo leer la imagen (necesitas conexión a internet la primera vez que usas la cámara).';
   }
   cameraInput.value = '';
+});
+
+// Traducir texto de un PDF: usa pdf.js (lector de PDF de Mozilla), se carga
+// solo la primera vez que se usa. Necesita conexión a internet esa primera vez.
+const pdfBtn = document.getElementById('pdfBtn');
+const pdfInput = document.getElementById('pdfInput');
+const pdfStatus = document.getElementById('pdfStatus');
+let pdfjsLoading = null;
+
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(pdfjsLoading) return pdfjsLoading;
+  pdfjsLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.min.js';
+    script.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('no se pudo cargar el lector de PDF'));
+    document.head.appendChild(script);
+  });
+  return pdfjsLoading;
+}
+
+pdfBtn.addEventListener('click', () => { haptic(); pdfInput.click(); });
+
+pdfInput.addEventListener('change', async () => {
+  const file = pdfInput.files[0];
+  if(!file) return;
+  pdfStatus.textContent = 'Preparando el lector de PDF (puede tardar un poco la primera vez)…';
+  try{
+    await loadPdfJs();
+    pdfStatus.textContent = 'Leyendo el PDF…';
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({data: arrayBuffer}).promise;
+    let fullText = '';
+    const maxPages = Math.min(pdf.numPages, 5); // suficiente para llegar a 500 caracteres
+    for(let i = 1; i <= maxPages; i++){
+      pdfStatus.textContent = `Leyendo página ${i} de ${maxPages}…`;
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(item => item.str).join(' ') + ' ';
+      if(fullText.trim().length >= 500) break;
+    }
+    const text = fullText.replace(/\s+/g, ' ').trim();
+    if(!text){
+      pdfStatus.textContent = 'No se encontró texto en ese PDF (puede ser un PDF escaneado como imagen).';
+      return;
+    }
+    const finalText = text.slice(0, 500);
+    fillPhraseWithConfirm(finalText);
+    pdfStatus.textContent = '✅ Texto extraído del PDF' + (text.length > 500 ? ' (se tomaron los primeros 500 caracteres)' : '') + '.';
+  }catch(e){
+    pdfStatus.textContent = 'No se pudo leer el PDF (necesitas conexión a internet la primera vez que usas esta función).';
+  }
+  pdfInput.value = '';
 });
 
 // Dictado por voz: usa el reconocimiento de voz del navegador (Chrome en
