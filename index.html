@@ -1052,6 +1052,29 @@ async function doTranslate(){
       signLink.rel = 'noopener';
       signLink.textContent = '🤟 Ver en lengua de señas';
       stampsDiv.children[i].appendChild(signLink);
+
+      const defBtn = document.createElement('button');
+      defBtn.type = 'button';
+      defBtn.className = 'sign-link';
+      defBtn.style.cssText = 'display:block;margin-top:6px;background:none;cursor:pointer;';
+      defBtn.textContent = '📖 Ver significado';
+      const defBox = document.createElement('div');
+      defBox.style.cssText = 'font-size:0.8rem;color:var(--text-dim);margin-top:6px;display:none;text-align:left;';
+      defBtn.addEventListener('click', async () => {
+        haptic();
+        if(defBox.style.display === 'block'){ defBox.style.display = 'none'; return; }
+        defBox.style.display = 'block';
+        defBox.textContent = 'Buscando significado…';
+        try{
+          const defs = await fetchDefinition(translated.replace(/\s\*$/, ''), targets[i]);
+          defBox.innerHTML = defs.map(d => '• ' + d).join('<br>') +
+            '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:6px;opacity:0.7;">Fuente: Wiktionary</div>';
+        }catch(e){
+          defBox.textContent = 'No se encontró un significado para esta palabra.';
+        }
+      });
+      stampsDiv.children[i].appendChild(defBtn);
+      stampsDiv.children[i].appendChild(defBox);
     }catch(e){
       if(runId !== lastRunId) return;
       results[i] = null;
@@ -1395,12 +1418,37 @@ function signLanguageUrl(word, langCode){
   return `https://www.spreadthesign.com/${locale}/search/?q=${encodeURIComponent(word)}`;
 }
 
+// Busca el significado/definición de una palabra usando Wiktionary
+// (diccionario libre y colaborativo, con ediciones en muchos idiomas).
+async function fetchDefinition(word, langCode){
+  const cleanWord = word.trim().split(/\s+/)[0].replace(/[.,;:!?¿¡"']/g, '');
+  if(!cleanWord) throw new Error('sin palabra');
+  const url = `https://${langCode}.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(cleanWord)}`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('sin definición');
+  const data = await res.json();
+  const key = Object.keys(data)[0];
+  if(!key || !data[key] || !data[key].length) throw new Error('sin definición');
+  const defs = [];
+  data[key].forEach(entry => {
+    (entry.definitions || []).slice(0, 2).forEach(d => {
+      const clean = d.definition.replace(/<[^>]+>/g, '');
+      defs.push((entry.partOfSpeech ? entry.partOfSpeech + ': ' : '') + clean);
+    });
+  });
+  if(!defs.length) throw new Error('sin definición');
+  return defs.slice(0, 3);
+}
+
 // Juego de ahorcado multilenguaje: palabras genéricas de las categorías
 // que ya tenemos, con dibujo propio y significado tipo diccionario al final.
 const HANGMAN_WORDS = {
-  "🐾 Animales": ["perro","gato","caballo","elefante","leon","pajaro","pez","conejo","vaca","cerdo","oso","tortuga"],
-  "🍳 Cocina": ["cuchara","tenedor","cuchillo","plato","olla","horno","nevera","taza","sarten","microondas"],
-  "🔢 Números": ["uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"]
+  "🐾 Animales": ["perro","gato","caballo","elefante","leon","pajaro","pez","conejo","vaca","cerdo","oso","tortuga","tigre","mono","rana","serpiente","aguila","delfin","ballena","jirafa","cebra","lobo","zorro","oveja","gallina","pato"],
+  "🍳 Cocina": ["cuchara","tenedor","cuchillo","plato","olla","horno","nevera","taza","sarten","microondas","vaso","servilleta","mantel","licuadora","tostadora","cafetera","mesa","silla","jarra","bandeja"],
+  "🔢 Números": ["uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez","once","doce","trece","catorce","quince","veinte"],
+  "🎨 Colores": ["rojo","azul","verde","amarillo","negro","blanco","naranja","morado","rosado","gris","marron","celeste"],
+  "🧍 Cuerpo": ["cabeza","mano","pie","ojo","oreja","nariz","boca","brazo","pierna","dedo","corazon","espalda"],
+  "👕 Ropa": ["camisa","pantalon","zapato","sombrero","vestido","chaqueta","calcetin","guante","bufanda","cinturon"]
 };
 const hangmanCatNames = Object.keys(HANGMAN_WORDS);
 const hangmanCatsDiv = document.getElementById('hangmanCats');
