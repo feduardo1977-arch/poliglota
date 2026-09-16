@@ -1,6 +1,6 @@
 // Service worker mínimo: necesario para que Android/Chrome consideren
 // esta página como una PWA instalable de verdad (requisito técnico).
-const CACHE_NAME = 'poliglota-v14';
+const CACHE_NAME = 'poliglota-v15';
 const FILES_TO_CACHE = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {

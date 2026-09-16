@@ -428,6 +428,18 @@
     background:var(--stamp-4);
     color:#0A0C0A;
   }
+  .hangman-key{
+    padding:10px 0;
+    font-size:0.95rem;
+    font-weight:600;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    border-radius:8px;
+  }
+  .hangman-key:disabled{opacity:0.35;cursor:default;}
+  .hangman-key.correct{background:var(--accent-2);color:#0A0C0A;border-color:transparent;}
+  .hangman-key.wrong{background:var(--stamp-1);color:#0A0C0A;border-color:transparent;}
   @media (max-width:520px){
     .conv-langs{flex-direction:column;}
   }
@@ -542,6 +554,28 @@
       <button type="button" class="btn-conv-mic" id="convMicA">🎤 Persona A</button>
       <button type="button" class="btn-conv-mic" id="convMicB">🎤 Persona B</button>
     </div>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-title">🎮 Ahorcado multilenguaje</h2>
+    <p style="font-size:0.82rem;color:var(--text-dim);margin:-8px 0 14px;">Adivina la palabra letra por letra en el idioma que elijas. Al terminar, te muestro su significado como diccionario.</p>
+
+    <div class="phrase-categories" id="hangmanCats" style="margin-bottom:12px;"></div>
+
+    <div class="row" style="margin-bottom:12px;">
+      <div>
+        <label>Jugar en el idioma</label>
+        <select id="hangmanLangSelect"></select>
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <button type="button" class="btn-ghost" id="hangmanNewWordBtn" style="width:100%;">🔀 Nueva palabra</button>
+      </div>
+    </div>
+
+    <div id="hangmanDrawing" style="text-align:center;margin-bottom:10px;"></div>
+    <div id="hangmanWordDisplay" style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:1.6rem;letter-spacing:6px;color:var(--text);margin-bottom:14px;min-height:2.2rem;"></div>
+    <div id="hangmanKeyboard" style="display:grid;grid-template-columns:repeat(7, 1fr);gap:6px;margin-bottom:14px;"></div>
+    <div id="hangmanResult" style="text-align:center;font-size:0.9rem;color:var(--text-dim);"></div>
   </div>
 
   <div class="panel">
@@ -1360,6 +1394,145 @@ function signLanguageUrl(word, langCode){
   const locale = bcp.toLowerCase().replace('-', '.');
   return `https://www.spreadthesign.com/${locale}/search/?q=${encodeURIComponent(word)}`;
 }
+
+// Juego de ahorcado multilenguaje: palabras genéricas de las categorías
+// que ya tenemos, con dibujo propio y significado tipo diccionario al final.
+const HANGMAN_WORDS = {
+  "🐾 Animales": ["perro","gato","caballo","elefante","leon","pajaro","pez","conejo","vaca","cerdo","oso","tortuga"],
+  "🍳 Cocina": ["cuchara","tenedor","cuchillo","plato","olla","horno","nevera","taza","sarten","microondas"],
+  "🔢 Números": ["uno","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"]
+};
+const hangmanCatNames = Object.keys(HANGMAN_WORDS);
+const hangmanCatsDiv = document.getElementById('hangmanCats');
+const hangmanLangSelect = document.getElementById('hangmanLangSelect');
+fillSelect(hangmanLangSelect, 'en', false);
+
+let hangmanState = { category: hangmanCatNames[0], spanishWord: '', puzzleWord: '', guessed: [], wrong: 0, over: false };
+
+function normalizeLetters(str){
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+hangmanCatsDiv.innerHTML = hangmanCatNames.map((c,i) =>
+  `<button type="button" class="cat-chip ${i===0?'active':''}" data-hcat="${c}">${c}</button>`
+).join('');
+hangmanCatsDiv.querySelectorAll('.cat-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    haptic();
+    hangmanCatsDiv.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('active', c === chip));
+    hangmanState.category = chip.dataset.hcat;
+    startHangmanRound();
+  });
+});
+hangmanLangSelect.addEventListener('change', () => startHangmanRound());
+document.getElementById('hangmanNewWordBtn').addEventListener('click', () => { haptic(); startHangmanRound(); });
+
+function drawHangman(wrong){
+  const parts = [
+    '<circle cx="60" cy="35" r="12" fill="none" stroke="var(--text)" stroke-width="3"/>',
+    '<line x1="60" y1="47" x2="60" y2="80" stroke="var(--text)" stroke-width="3"/>',
+    '<line x1="60" y1="55" x2="40" y2="70" stroke="var(--text)" stroke-width="3"/>',
+    '<line x1="60" y1="55" x2="80" y2="70" stroke="var(--text)" stroke-width="3"/>',
+    '<line x1="60" y1="80" x2="42" y2="105" stroke="var(--text)" stroke-width="3"/>',
+    '<line x1="60" y1="80" x2="78" y2="105" stroke="var(--text)" stroke-width="3"/>'
+  ];
+  const shown = parts.slice(0, wrong).join('');
+  return `<svg viewBox="0 0 140 130" style="width:130px;height:120px;">
+    <line x1="10" y1="120" x2="100" y2="120" stroke="var(--border)" stroke-width="3"/>
+    <line x1="30" y1="120" x2="30" y2="10" stroke="var(--border)" stroke-width="3"/>
+    <line x1="30" y1="10" x2="60" y2="10" stroke="var(--border)" stroke-width="3"/>
+    <line x1="60" y1="10" x2="60" y2="23" stroke="var(--border)" stroke-width="3"/>
+    ${shown}
+  </svg>`;
+}
+
+async function startHangmanRound(){
+  const words = HANGMAN_WORDS[hangmanState.category];
+  const spanishWord = words[Math.floor(Math.random() * words.length)];
+  const targetLang = hangmanLangSelect.value;
+  document.getElementById('hangmanResult').textContent = 'Preparando palabra…';
+  document.getElementById('hangmanWordDisplay').textContent = '';
+  document.getElementById('hangmanKeyboard').innerHTML = '';
+
+  let puzzle = spanishWord;
+  try{
+    if(targetLang !== 'es'){
+      puzzle = await translateOne(spanishWord, 'es', targetLang);
+      puzzle = puzzle.replace(/\s\*$/, '').trim();
+    }
+  }catch(e){ /* usa la palabra en español si falla la traducción */ }
+
+  hangmanState.spanishWord = spanishWord;
+  hangmanState.puzzleWord = normalizeLetters(puzzle);
+  hangmanState.guessed = [];
+  hangmanState.wrong = 0;
+  hangmanState.over = false;
+
+  document.getElementById('hangmanDrawing').innerHTML = drawHangman(0);
+  document.getElementById('hangmanResult').textContent = '';
+  renderHangmanWord();
+  renderHangmanKeyboard();
+}
+
+function renderHangmanWord(){
+  const display = hangmanState.puzzleWord.split('').map(ch => {
+    if(ch === ' ' || ch === '-') return ch;
+    return hangmanState.guessed.includes(ch) ? ch.toUpperCase() : '_';
+  }).join(' ');
+  document.getElementById('hangmanWordDisplay').textContent = display;
+}
+
+function renderHangmanKeyboard(){
+  const letters = 'abcdefghijklmnñopqrstuvwxyz'.split('');
+  const kb = document.getElementById('hangmanKeyboard');
+  kb.innerHTML = letters.map(l => `<button type="button" class="hangman-key" data-letter="${l}">${l.toUpperCase()}</button>`).join('');
+  kb.querySelectorAll('.hangman-key').forEach(btn => {
+    btn.addEventListener('click', () => guessHangmanLetter(btn.dataset.letter, btn));
+  });
+}
+
+async function guessHangmanLetter(letter, btn){
+  if(hangmanState.over || hangmanState.guessed.includes(letter)) return;
+  haptic();
+  hangmanState.guessed.push(letter);
+  btn.disabled = true;
+  if(hangmanState.puzzleWord.includes(letter)){
+    btn.classList.add('correct');
+  } else {
+    btn.classList.add('wrong');
+    hangmanState.wrong++;
+    document.getElementById('hangmanDrawing').innerHTML = drawHangman(hangmanState.wrong);
+  }
+  renderHangmanWord();
+
+  const allLettersGuessed = hangmanState.puzzleWord.split('').every(ch => ch === ' ' || ch === '-' || hangmanState.guessed.includes(ch));
+  if(allLettersGuessed){
+    hangmanState.over = true;
+    document.querySelectorAll('.hangman-key').forEach(k => k.disabled = true);
+    await revealHangmanMeaning('🎉 ¡Correcto! La palabra era: ' + hangmanState.puzzleWord.toUpperCase());
+  } else if(hangmanState.wrong >= 6){
+    hangmanState.over = true;
+    document.querySelectorAll('.hangman-key').forEach(k => k.disabled = true);
+    await revealHangmanMeaning('💀 Se acabaron los intentos. La palabra era: ' + hangmanState.puzzleWord.toUpperCase());
+  }
+}
+
+async function revealHangmanMeaning(headline){
+  const resultDiv = document.getElementById('hangmanResult');
+  resultDiv.innerHTML = `<div style="color:var(--text);font-weight:600;margin-bottom:8px;">${headline}</div><div>Buscando el significado…</div>`;
+  const targets = [0,1,2,3].map(i => document.getElementById('target'+i).value);
+  const lines = [];
+  for(const t of targets){
+    try{
+      const translated = await translateOne(hangmanState.spanishWord, 'es', t);
+      lines.push(`${FLAG[t]||''} ${langName(t)}: ${translated.replace(/\s\*$/,'')}`);
+    }catch(e){ /* omite si falla */ }
+  }
+  resultDiv.innerHTML = `<div style="color:var(--text);font-weight:600;margin-bottom:8px;">${headline}</div>` +
+    `<div style="text-align:left;display:inline-block;">📖 ${lines.join('<br>📖 ')}</div>`;
+}
+
+startHangmanRound();
 
 loadVocab();
 
